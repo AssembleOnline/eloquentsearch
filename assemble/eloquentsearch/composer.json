@@ -1,0 +1,20 @@
+{
+    "name": "assemble/eloquentsearch",
+    "description": "Search and retrieve an eloquent model entity based on complex search criteria from the model relations.",
+    "type": "Library",
+    "require": {
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Alex Blake",
+            "email": "alex@assemble.co.za"
+        }
+    ],
+    "minimum-stability": "dev",
+    "autoload": {
+        "psr-4": {
+            "Assemble\\EloquentSearch\\": "src"
+        }
+    }
+}
