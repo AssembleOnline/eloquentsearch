@@ -17,7 +17,7 @@ class Searcher
      * The class entities in the system.
      */
     private $_ENTITIES;
-
+    private $subJoined = false;
 
     /**
      * Create a new Searcher instance.
@@ -164,17 +164,17 @@ class Searcher
      * @var Array
      * @return \Illuminate\Database\Query\Builder[]|array
      */
-    public function getSearch($search, $order = null)
+    public function getSearch($search, $orderBy = null, $orderAs = null)
     {
         //check if order set properly
-        if($order == null || !isset($order['col']) || !isset($order['dir']) )
+        if( ( $orderBy == null || empty($orderBy) ) || ( $orderAs == null || empty($orderAs) ) )
         {
             $order = null;
         }
         else
         {
-            $orderDir = $order['dir'];
-            $order = explode('.', $order['col']);
+            $orderDir = $orderAs;
+            $order = explode('.', $orderBy);
             $orderField = array_pop($order);
             $orderLast = end($order);
         }
@@ -229,7 +229,19 @@ class Searcher
                     ]);
             }
 
+
             $query = (new $used_entity);//create new instance of the element, we need something to query on, so here it is
+
+            if(!(method_exists($query, 'isSearchable') && $query->isSearchable()))
+            {
+                return new MessageBag([
+                    'code' => 401,
+                    'messages' => [
+                        //@TODO: lets add more clarity here later, for now this will do.
+                        'You do not have permission to view this resource.' 
+                    ]
+                ]);
+            }
 
             //Ok, not broken yet? good, lets continue and start building our query. First we just need to make sure theres something there.
             if(is_array($criteria) && count($criteria) >= 1)
@@ -310,21 +322,21 @@ class Searcher
             //         $results->add($item);
             //     });
             // }
+            
+            if(!$this->subJoined){
 
-            if($order != null){
-
-                if(count($order) == 0)
+                if(isset($orderField) && isset($orderDir))
                 {
                     $query = $query->orderBy($orderField, $orderDir);
                 }
-                else
+                elseif(count($order) > 0)
                 {
                     foreach($order as $curOrder)
                     {
                         $query = $query->join($curOrder, $query->getModel()->getTable().'.'.$curOrder.'_id', '=', $curOrder.'.id')->orderBy($curOrder.'.'.$orderField, $orderDir);
                     }
                 }
-
+                $this->subJoined = false;
             }
 
             $results = $query;
@@ -368,12 +380,17 @@ class Searcher
         if(count($order) > 0 && $rel == $order[0])
         {
             $curOrder = array_shift($order);
-            Log::info($curOrder.' - '.$orderDir.' -l- '.$orderLast);
         }
 
+        $runComplex = true;
+        if(method_exists($rel, 'isSearchable'))
+        {
+            $runComplex = $rel->isSearchable();
+        }
         //return a built query segment based on the criteria sent through
+        if($runComplex)
         $query = $query->whereHas($rel, 
-            function ($inner) use($field, $where, $value, $rel, $relations, $last, $curOrder, $order, $orderField, $orderLast, $orderDir) {
+            function ($inner) use($field, $where, $value, $rel, $relations, $last, $curOrder, $order, &$orderField, $orderLast, $orderDir) {
                 //make sure that the relation is not the last one in the list.
                 if($rel == $last) {
                     /**
@@ -402,8 +419,15 @@ class Searcher
             }
         );
 
+        /*
+        * This is a workaround for ordering a result set by an associated value in another table, 
+        * since the way we construct the query is not compatible with an orderby sub table, that needs a join, 
+        * so we join here based on the standardisation assumption... 
+        * which is needing to me migrated to configurations within models and use this as a fallback.
+        */
         if(!empty($curOrder)){
             $query = $query->join($curOrder, $query->getModel()->getTable().'.'.$curOrder.'_id', '=', $curOrder.'.id')->orderBy($curOrder.'.'.$orderField, $orderDir);
+            $this->subJoined = true;
         }
         return $query;
     }
