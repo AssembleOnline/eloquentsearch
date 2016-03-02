@@ -325,16 +325,29 @@ class Searcher
             
             if(!$this->subJoined){
 
-                if(isset($orderField) && isset($orderDir))
-                {
-                    $query = $query->orderBy($orderField, $orderDir);
-                }
-                elseif(count($order) > 0)
+                
+                if(count($order) > 0)
                 {
                     foreach($order as $curOrder)
                     {
-                        $query = $query->join($curOrder, $query->getModel()->getTable().'.'.$curOrder.'_id', '=', $curOrder.'.id')->orderBy($curOrder.'.'.$orderField, $orderDir);
+                        $ent_key = $this->getEntityClass($curOrder);
+
+                        if($ent_key == null)
+                        {
+                            return new MessageBag([
+                                    'messages' => [
+                                        //@TODO: lets add more clarity here later, for now this will do.
+                                        'Entity does not exist: '.$curOrder 
+                                    ]
+                                ]);
+                        }
+                        $ent = (new $ent_key);
+                        $query = $query->join($ent->getTable(), $query->getModel()->getTable().'.'.$ent->getTable().'_id', '=', $ent->getTable().'.id')->orderBy($ent->getTable().'.'.$orderField, $orderDir);
                     }
+                }
+                elseif(isset($orderField) && isset($orderDir))
+                {
+                    $query = $query->orderBy($orderField, $orderDir);
                 }
                 $this->subJoined = false;
             }
@@ -344,6 +357,7 @@ class Searcher
 
         if(!empty($results))
         {
+            // print_r($results->toSql());die;
             return $results;
         }
         else
@@ -426,7 +440,19 @@ class Searcher
         * which is needing to me migrated to configurations within models and use this as a fallback.
         */
         if(!empty($curOrder)){
-            $query = $query->join($curOrder, $query->getModel()->getTable().'.'.$curOrder.'_id', '=', $curOrder.'.id')->orderBy($curOrder.'.'.$orderField, $orderDir);
+            $ent_key = $this->getEntityClass($curOrder);
+
+            if($ent_key == null)
+            {
+                return new MessageBag([
+                        'messages' => [
+                            //@TODO: lets add more clarity here later, for now this will do.
+                            'Entity does not exist: '.$curOrder 
+                        ]
+                    ]);
+            }
+            $ent = (new $ent_key);
+            $query = $query->join($ent->getTable(), $query->getModel()->getTable().'.'.$ent->getTable().'_id', '=', $ent->getTable().'.id')->orderBy($ent->getTable().'.'.$orderField, $orderDir);
             $this->subJoined = true;
         }
         return $query;
