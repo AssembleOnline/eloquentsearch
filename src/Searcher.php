@@ -244,6 +244,7 @@ class Searcher
             }
 
             //Ok, not broken yet? good, lets continue and start building our query. First we just need to make sure theres something there.
+            $first = true;
             if(is_array($criteria) && count($criteria) >= 1)
             foreach($criteria as $criteria_item) {
 
@@ -264,6 +265,13 @@ class Searcher
                                 (isset($criteria_item[2]) ?
                                         $criteria_item[2] :
                                         ''));
+                $isOr = (isset($criteria_item['or']) ? 
+                            $criteria_item['or'] : 
+                            ( isset($criteria_item[3]) ? true : false ) 
+                        );
+                
+                if($first){ $isOr = false;$first = false; }//overwrite OR if first element, cannot OR an initial search query param  
+                              
 
                 if($field == null || $where == null)
                 {//break from nulls.
@@ -286,7 +294,14 @@ class Searcher
                     }
                     else
                     {
-                        $query = $query->where($field, $where, $value);
+                        if($isOr == true)
+                        {
+                            $query = $query->orWhere($field, $where, $value);
+                        }
+                        else
+                        {
+                            $query = $query->where($field, $where, $value);
+                        }
                         
                     }
                 }
@@ -301,7 +316,7 @@ class Searcher
                     
 
 
-                    $query = $this->whereHasBuilder($query, $relations, $field, $where, $value, $last, $order, $orderField, $orderLast, $orderDir);
+                    $query = $this->whereHasBuilder($query, $relations, $field, $where, $value, $last, $order, $orderField, $orderLast, $orderDir, $isOr);
 
                 }
 
@@ -328,8 +343,10 @@ class Searcher
                 
                 if(count($order) > 0)
                 {
+                    $last_order = null;
                     foreach($order as $curOrder)
                     {
+                        if($last_order == null){$last_order = $curOrder;}
                         $ent_key = $this->getEntityClass($curOrder);
 
                         if($ent_key == null)
@@ -343,6 +360,7 @@ class Searcher
                         }
                         $ent = (new $ent_key);
                         $query = $query->join($ent->getTable(), $query->getModel()->getTable().'.'.$ent->getTable().'_id', '=', $ent->getTable().'.id')->orderBy($ent->getTable().'.'.$orderField, $orderDir);
+                        $last_order = $curOrder;
                     }
                 }
                 elseif(isset($orderField) && isset($orderDir))
@@ -385,7 +403,7 @@ class Searcher
      *
      * @return \Illuminate\Database\Query\Builder[]|array
      */
-    private function whereHasBuilder(&$query, &$relations, &$field, &$where, &$value, &$last, &$order, &$orderField, &$orderLast, &$orderDir)
+    private function whereHasBuilder(&$query, &$relations, &$field, &$where, &$value, &$last, &$order, &$orderField, &$orderLast, &$orderDir, &$isOr)
     {
         //grab the relations parsed
         $rel = array_shift($relations);
@@ -403,35 +421,73 @@ class Searcher
         }
         //return a built query segment based on the criteria sent through
         if($runComplex)
-        $query = $query->whereHas($rel, 
-            function ($inner) use($field, $where, $value, $rel, $relations, $last, $curOrder, $order, &$orderField, $orderLast, $orderDir) {
-                //make sure that the relation is not the last one in the list.
-                if($rel == $last) {
-                    /**
-                    *   !IMPORTANT
-                    *   Ensure that the field entered is not in the list of hidden fields on the model, 
-                    *   this ensures that the hidden fields are not searchable, since that would open it up to brute force attempts.
-                    */
-                    if(!in_array($field, $inner->getModel()->getHidden()))
-                    {
-                        //if the condition is an 'IN' statement, there needs to be a seperate syntax so we catch it here
-                        if($where == 'in')
-                        { 
-                            $value = (is_array($value) ? $value : explode(',', $value));
-                            $inner->whereIn($field, $value);
+        {
+            if($isOr == true)
+            {
+                $query = $query->orWhereHas($rel, 
+                    function ($inner) use($field, $where, $value, $rel, $relations, $last, $curOrder, $order, &$orderField, $orderLast, $orderDir, &$isOr) {
+                        //make sure that the relation is not the last one in the list.
+                        if($rel == $last) {
+                            /**
+                            *   !IMPORTANT
+                            *   Ensure that the field entered is not in the list of hidden fields on the model, 
+                            *   this ensures that the hidden fields are not searchable, since that would open it up to brute force attempts.
+                            */
+                            if(!in_array($field, $inner->getModel()->getHidden()))
+                            {
+                                //if the condition is an 'IN' statement, there needs to be a seperate syntax so we catch it here
+                                if($where == 'in')
+                                { 
+                                    $value = (is_array($value) ? $value : explode(',', $value));
+                                    $inner->whereIn($field, $value);
+                                }
+                                else
+                                {
+                                    $inner->where($field, $where, $value);
+                                }
+                            }
                         }
                         else
                         {
-                            $inner->where($field, $where, $value);
+                            $this->whereHasBuilder($inner, $relations, $field, $where, $value, $last, $order, $orderField, $orderLast, $orderDir, $isOr);
                         }
                     }
-                }
-                else
-                {
-                    $this->whereHasBuilder($inner, $relations, $field, $where, $value, $last, $order, $orderField, $orderLast, $orderDir);
-                }
+                );
             }
-        );
+            else
+            {
+                $query = $query->whereHas($rel, 
+                    function ($inner) use($field, $where, $value, $rel, $relations, $last, $curOrder, $order, &$orderField, $orderLast, $orderDir, &$isOr) {
+                        //make sure that the relation is not the last one in the list.
+                        if($rel == $last) {
+                            /**
+                            *   !IMPORTANT
+                            *   Ensure that the field entered is not in the list of hidden fields on the model, 
+                            *   this ensures that the hidden fields are not searchable, since that would open it up to brute force attempts.
+                            */
+                            if(!in_array($field, $inner->getModel()->getHidden()))
+                            {
+                                //if the condition is an 'IN' statement, there needs to be a seperate syntax so we catch it here
+                                if($where == 'in')
+                                { 
+                                    $value = (is_array($value) ? $value : explode(',', $value));
+                                    $inner->whereIn($field, $value);
+                                }
+                                else
+                                {
+                                    $inner->where($field, $where, $value);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            $this->whereHasBuilder($inner, $relations, $field, $where, $value, $last, $order, $orderField, $orderLast, $orderDir, $isOr);
+                        }
+                    }
+                );
+            }
+            
+        }
 
         /*
         * This is a workaround for ordering a result set by an associated value in another table, 
