@@ -439,11 +439,11 @@ class Searcher
                                 if($where == 'in')
                                 { 
                                     $value = (is_array($value) ? $value : explode(',', $value));
-                                    $inner->whereIn($field, $value);
+                                    $inner->whereIn($inner->getModel()->getTable().'.'.$field, $value);
                                 }
                                 else
                                 {
-                                    $inner->where($field, $where, $value);
+                                    $inner->where($inner->getModel()->getTable().'.'.$field, $where, $value);
                                 }
                             }
                         }
@@ -471,11 +471,11 @@ class Searcher
                                 if($where == 'in')
                                 { 
                                     $value = (is_array($value) ? $value : explode(',', $value));
-                                    $inner->whereIn($field, $value);
+                                    $inner->whereIn($inner->getModel()->getTable().'.'.$field, $value);
                                 }
                                 else
                                 {
-                                    $inner->where($field, $where, $value);
+                                    $inner->where($inner->getModel()->getTable().'.'.$field, $where, $value);
                                 }
                             }
                         }
