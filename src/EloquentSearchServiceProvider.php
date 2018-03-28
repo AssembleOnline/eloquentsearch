@@ -3,9 +3,12 @@
 namespace Assemble\EloquentSearch;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Database\Eloquent\Builder;
 
 class EloquentSearchServiceProvider extends ServiceProvider
 {
+    use Concerns\JoinsToModel;
+
     /**
      * Bootstrap the application services.
      *
@@ -13,22 +16,15 @@ class EloquentSearchServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        $this->setupConfig();
-    }
-
-
-    /**
-     * Setup the config.
-     *
-     * @return void
-     */
-    protected function setupConfig()
-    {
-        $source = realpath(__DIR__.'/../config/eloquent_search.php');
+        $source = __DIR__.'/../config/eloquent_search.php';
 
         $this->publishes([$source => config_path('eloquent_search.php')]);
 
         $this->mergeConfigFrom($source, 'eloquent_search');
+
+
+        // query helper
+        Builder::macro('joinsToModel', $this->joinsToModel());
     }
 
     /**

@@ -6,6 +6,7 @@ use Validator;
 use Config;
 use Illuminate\Support\MessageBag;
 use Log;
+
 /**
  * This is the searcher class.
  *
@@ -47,6 +48,33 @@ class Searcher
     public function listEntities()
     {
         return array_keys($this->_ENTITIES);
+    }
+
+    /**
+     * Field / Relation Searchable On model
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function searchableItem($model, $value)
+    {
+        if(!property_exists($model, 'searchable')) {
+            return false;
+        }
+        foreach($model->searchable as $key => $val) {
+            // simple searchable = true
+            if(is_string($val)) {
+                if($val == $value) {
+                    return true;
+                }
+            }
+            // @TODO: Add callable specific to relation perhaps?
+            // if(is_callable($val)) {
+            //     if($key == $value) {
+            //         return false;
+            //     }
+            // }
+        }
+        return false;
     }
 
     /**
@@ -341,33 +369,63 @@ class Searcher
             if(!$this->subJoined){
 
                 
+                // if(count($order) > 0)
+                // {
+                //     $last_order = null;
+                //     foreach($order as $curOrder)
+                //     {
+                //         if($last_order == null){$last_order = $curOrder;}
+                //         $ent_key = $this->getEntityClass($curOrder);
+
+                //         if($ent_key == null)
+                //         {
+                //             return new MessageBag([
+                //                     'messages' => [
+                //                         //@TODO: lets add more clarity here later, for now this will do.
+                //                         'Entity does not exist: '.$curOrder 
+                //                     ]
+                //                 ]);
+                //         }
+                //         $ent = (new $ent_key);
+                //         $query = $query->join($ent->getTable(), $query->getModel()->getTable().'.'.$ent->getTable().'_id', '=', $ent->getTable().'.id')->orderBy($ent->getTable().'.'.$orderField, $orderDir);
+                //         $last_order = $curOrder;
+                //     }
+                // }
+                // elseif(isset($orderField) && isset($orderDir))
+                // {
+                //     $query = $query->orderBy($orderField, $orderDir);
+                // }
+                // $this->subJoined = false;
+
+
+                // order by query builder
                 if(count($order) > 0)
                 {
-                    $last_order = null;
-                    foreach($order as $curOrder)
+                    
+                    $ent = $this->getEntityClass($entity);
+                    $ent = new $ent;
+                    foreach($order as $key => $curOrder)
                     {
-                        if($last_order == null){$last_order = $curOrder;}
-                        $ent_key = $this->getEntityClass($curOrder);
-
-                        if($ent_key == null)
-                        {
+                        if(!$this->searchableItem($ent, $curOrder)) {
                             return new MessageBag([
-                                    'messages' => [
-                                        //@TODO: lets add more clarity here later, for now this will do.
-                                        'Entity does not exist: '.$curOrder 
-                                    ]
-                                ]);
+                                'code' => 401,
+                                'messages' => [
+                                    //@TODO: lets add more clarity here later, for now this will do.
+                                    'You do not have permission to view this resource.' 
+                                ]
+                            ]);
                         }
-                        $ent = (new $ent_key);
-                        $query = $query->join($ent->getTable(), $query->getModel()->getTable().'.'.$ent->getTable().'_id', '=', $ent->getTable().'.id')->orderBy($ent->getTable().'.'.$orderField, $orderDir);
-                        $last_order = $curOrder;
+                        $rel = call_user_func([$ent, $curOrder]);
+                        $rel = get_class($rel->getRelated());
+                        $query = $query->joinsToModel($curOrder, get_class($ent), ($key == 1));
+                        $ent = new $rel;
                     }
+                    $query = $query->orderBy($query->priorJoinToModelParents[$ent->getTable()].'.'.$orderField, $orderDir);
                 }
                 elseif(isset($orderField) && isset($orderDir))
                 {
                     $query = $query->orderBy($orderField, $orderDir);
                 }
-                $this->subJoined = false;
             }
 
             $results = $query;
@@ -390,7 +448,6 @@ class Searcher
 
     }
 
-
     /**
      * SearchPattern interpreter that will search recurseively through model relations as defined.
      *
@@ -408,11 +465,11 @@ class Searcher
         //grab the relations parsed
         $rel = array_shift($relations);
 
-        $curOrder = null;
-        if(count($order) > 0 && $rel == $order[0])
-        {
-            $curOrder = array_shift($order);
-        }
+        // $curOrder = null;
+        // if(count($order) > 0 && $rel == $order[0])
+        // {
+        //     $curOrder = array_shift($order);
+        // }
 
         $runComplex = true;
         if(method_exists($rel, 'isSearchable'))
@@ -495,22 +552,22 @@ class Searcher
         * so we join here based on the standardisation assumption... 
         * which is needing to me migrated to configurations within models and use this as a fallback.
         */
-        if(!empty($curOrder)){
-            $ent_key = $this->getEntityClass($curOrder);
+        // if(!empty($curOrder)){
+        //     $ent_key = $this->getEntityClass($curOrder);
 
-            if($ent_key == null)
-            {
-                return new MessageBag([
-                        'messages' => [
-                            //@TODO: lets add more clarity here later, for now this will do.
-                            'Entity does not exist: '.$curOrder 
-                        ]
-                    ]);
-            }
-            $ent = (new $ent_key);
-            $query = $query->join($ent->getTable(), $query->getModel()->getTable().'.'.$ent->getTable().'_id', '=', $ent->getTable().'.id')->orderBy($ent->getTable().'.'.$orderField, $orderDir);
-            $this->subJoined = true;
-        }
+        //     if($ent_key == null)
+        //     {
+        //         return new MessageBag([
+        //                 'messages' => [
+        //                     //@TODO: lets add more clarity here later, for now this will do.
+        //                     'Entity does not exist: '.$curOrder 
+        //                 ]
+        //             ]);
+        //     }
+        //     $ent = (new $ent_key);
+        //     $query = $query->join($ent->getTable(), $query->getModel()->getTable().'.'.$ent->getTable().'_id', '=', $ent->getTable().'.id')->orderBy($ent->getTable().'.'.$orderField, $orderDir);
+        //     $this->subJoined = true;
+        // }
         return $query;
     }
 

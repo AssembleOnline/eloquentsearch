@@ -3,6 +3,7 @@
     "description": "Search and retrieve an eloquent model entity based on complex search criteria from the model relations.",
     "type": "Library",
     "require": {
+        "laravel/framework": "5.5.*"
     },
     "license": "MIT",
     "authors": [
