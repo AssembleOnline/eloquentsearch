@@ -43,9 +43,20 @@ return [
 ```
 
 
-### Additional Feature:
+## Usage
 
-Implement the method 'isSearchable' in your models for the searcher to determine if it is allowed to search/return that model.
+To make use of the search functionality, you will need to implement a `$searchable` property on your models to detail which fields and relations are searchable.
+```php
+/*
+*   Searchable Fields
+*/
+public $searchable = [
+    'name', 'user_id', // fields
+    'user', 'tags', // relations
+];
+```
+
+You can also implement the method 'isSearchable' in your models for the searcher to determine if it is allowed to search/return that model.
 ``` php
 public function isSearchable(){
 	// Do your checks to determine if the model may be searched by the user
