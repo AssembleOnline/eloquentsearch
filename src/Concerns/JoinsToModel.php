@@ -11,7 +11,7 @@ trait JoinsToModel
     
 
     private function joinsToModel() {
-        return function($relation, $from, $dd = false) {
+        return function($relation, $from) {
 
             /**
              * Wrap the attributes of the give JSON path.
@@ -33,11 +33,6 @@ trait JoinsToModel
             }
             $relation = $from->getRelationWithoutConstraints($relation);
             
-
-            if($dd) {
-                // dd($this);
-            }
-
             $parent = $relation->getParent();
             if(property_exists($this, 'priorJoinToModelParents')) {
                 if(array_key_exists($parent->getTable(), $this->priorJoinToModelParents)) {
@@ -48,22 +43,6 @@ trait JoinsToModel
             }
             $related = $relation->getRelated();
             switch(get_class($relation)) {
-                case  'Illuminate\Database\Eloquent\Relations\BelongsToMany':
-                    // For BelongsToMany
-                    $query = $relation->getQuery()->getQuery();
-                    $hash = $relation->getRelationCountHash();
-                    $table = $relation->getTable();
-                    $FK = $relation->getQualifiedForeignPivotKeyName();
-                    $query->from($table);
-
-                    // handle self relations
-                    // if(get_class($relation->getParent()) === get_class($relation->getRelated())) {
-                        $query->from($table.' as '.$hash);
-                        $related->setTable($hash);
-                        $FK = str_replace($table, $hash, $FK);
-                    // }
-
-                break;
                 case  'Illuminate\Database\Eloquent\Relations\BelongsTo':
                     // For HasOneOrMany
                     $query = $relation->getQuery()->getQuery();
@@ -75,35 +54,55 @@ trait JoinsToModel
                     // if(get_class($relation->getParent()) === get_class($relation->getRelated())) {
                         $query->from($table.' as '.$hash);
                         $related->setTable($hash);
-                        $FK = str_replace($table, $hash, $FK);
+                        $FK = str_replace($table.'.', $hash.'.', $FK);
                     // }
 
+                    $PK = $relation->getQualifiedOwnerKeyName();
                 break;
-                default:
+                case  'Illuminate\Database\Eloquent\Relations\HasOne':
                     // For HasOneOrMany
                     $query = $relation->getQuery()->getQuery();
                     $hash = $relation->getRelationCountHash();
                     $table = $related->getTable();
+                    // dd(get_class_methods($relation));
                     $FK = $relation->getQualifiedForeignKeyName();
 
                     // handle self relations
                     // if(get_class($relation->getParent()) === get_class($relation->getRelated())) {
                         $query->from($table.' as '.$hash);
                         $related->setTable($hash);
-                        $FK = str_replace($table, $hash, $FK);
+                        $FK = str_replace($table.'.', $hash.'.', $FK);
                     // }
+                    $PK = $relation->getQualifiedParentKeyName();
+                break;
+                // case  'Illuminate\Database\Eloquent\Relations\BelongsToMany':
+                //     // For BelongsToMany
+                //     $query = $relation->getQuery()->getQuery();
+                //     $hash = $relation->getRelationCountHash();
+                //     $table = $relation->getTable();
+
+                //     $FK = $relation->getQualifiedForeignPivotKeyName();
+
+                //     // pivot
+
+                //     $PK = $relation->getQualifiedParentKeyName();
+                //     $query->from($table);
+
+                //     // handle self relations
+                //     // if(get_class($relation->getParent()) === get_class($relation->getRelated())) {
+                //         $query->from($table.' as '.$hash);
+                //         $related->setTable($hash);
+                //         $FK = str_replace($table, $hash, $FK);
+                //     // }
+
+                // break;
+                default:
+                    throw new \Exception("joinsToModel can only be called on belongsTo and hasOne relations.");
             }
 
-            $this->leftJoin($query->from, $relation->getQualifiedOwnerKeyName(), '=', $FK);
+            $this->leftJoin($query->from, $PK, '=', $FK);
             $this->priorJoinToModelParents[$table] = $hash;
 
-            // $this->groupBy($relation->getQualifiedParentKeyName());
-
-            // if(empty($this->getQuery()->orders)) {
-            //     $this->orderBy($relation->getQualifiedParentKeyName(), "asc"); // apply default order
-            // }
-
-            // dd($this->toSql());
             return $this;
         };
     } 

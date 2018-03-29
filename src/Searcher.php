@@ -32,7 +32,7 @@ class Searcher
     /**
      * Accessor to retrieve the class entitiy to avoid direct connection.
      *
-     * @var String
+     * @param String $class_ref
      * @return \Class
      */
     private function getEntityClass($class_ref){
@@ -91,8 +91,6 @@ class Searcher
         {
             $messages[$key.'.entity.required'] = 'Entity at #'.$key.' Must be present';
             $messages[$key.'.entity.in'] = 'Entity at #'.$key.' is not a valid entity reference';
-            // $messages[$key.'.criteria.required'] = 'Criteria List at #'.$key.' Must be present';
-            // $messages[$key.'.criteria.0.required'] = 'Criteria List at #'.$key.' Must have at least 1 constructed criteria';
 
             if(isset($value['criteria']) && !empty($value['criteria']))
             foreach($value['criteria'] as $key2 => $sub)
@@ -144,8 +142,6 @@ class Searcher
         {
             $list_entities = implode(',',array_keys($this->_ENTITIES));
             $rules[$key.'.entity'] = 'required|in:'.$list_entities;
-            // $rules[$key.'.criteria'] = 'required';
-            // $rules[$key.'.criteria.0'] = 'required';
 
 
             if(isset($value['criteria']) && !empty($value['criteria']))
@@ -185,6 +181,45 @@ class Searcher
         return $rules;
     }
 
+    /**
+     * Field / Relation Searchable On model
+     *
+     * @param String $query reference
+     * @param String $entity initial entity key
+     * @param Array $order order relations
+     * @param String $orderField field to order by on final relation
+     * @param String $orderDir Direction of ordering [ASC,DESC]
+     * @return \Illuminate\Http\Response
+     */
+    private function orderQuery(&$query, $entity, $order, $orderField, $orderDir) {
+        if(count($order) > 0)
+        {
+            
+            $ent = $this->getEntityClass($entity);
+            $ent = new $ent;
+            foreach($order as $key => $curOrder)
+            {
+                if(!$this->searchableItem($ent, $curOrder)) {
+                    return new MessageBag([
+                        'code' => 401,
+                        'messages' => [
+                            //@TODO: lets add more clarity here later, for now this will do.
+                            'You do not have permission to view this resource.' 
+                        ]
+                    ]);
+                }
+                $rel = call_user_func([$ent, $curOrder]);
+                $rel = get_class($rel->getRelated());
+                $query = $query->joinsToModel($curOrder, get_class($ent));
+                $ent = new $rel;
+            }
+            $query = $query->orderBy($query->priorJoinToModelParents[$ent->getTable()].'.'.$orderField, $orderDir);
+        }
+        elseif(isset($orderField) && isset($orderDir))
+        {
+            $query = $query->orderBy($orderField, $orderDir);
+        }
+    }
 
     /**
      * SearchPattern interpreter that will search recurseively through model relations as defined.
@@ -198,6 +233,9 @@ class Searcher
         if( ( $orderBy == null || empty($orderBy) ) || ( $orderAs == null || empty($orderAs) ) )
         {
             $order = null;
+            $orderDir = null;
+            $orderField = null;
+            $orderLast = null;
         }
         else
         {
@@ -258,7 +296,7 @@ class Searcher
             }
 
 
-            $query = (new $used_entity);//create new instance of the element, we need something to query on, so here it is
+            $query = (new $used_entity); //create new instance of the element, we need something to query on, so here it is
 
             if(!(method_exists($query, 'isSearchable') && $query->isSearchable()))
             {
@@ -343,97 +381,25 @@ class Searcher
 
                     
 
-
-                    $query = $this->whereHasBuilder($query, $relations, $field, $where, $value, $last, $order, $orderField, $orderLast, $orderDir, $isOr);
+                    $query = $this->whereHasBuilder($query, $relations, $field, $where, $value, $last, null, $isOr);
 
                 }
 
                 
             }
-
-            // $final = $query->get()->each(function($item) use($entity){
-            //     $item['entity'] = $entity;
-            // });
-
-            // if(empty($results))
-            // {
-            //     $results = $final;
-            // }
-            // else
-            // {
-            //     $final->each(function($item) use($results){
-            //         $results->add($item);
-            //     });
-            // }
             
-            if(!$this->subJoined){
-
-                
-                // if(count($order) > 0)
-                // {
-                //     $last_order = null;
-                //     foreach($order as $curOrder)
-                //     {
-                //         if($last_order == null){$last_order = $curOrder;}
-                //         $ent_key = $this->getEntityClass($curOrder);
-
-                //         if($ent_key == null)
-                //         {
-                //             return new MessageBag([
-                //                     'messages' => [
-                //                         //@TODO: lets add more clarity here later, for now this will do.
-                //                         'Entity does not exist: '.$curOrder 
-                //                     ]
-                //                 ]);
-                //         }
-                //         $ent = (new $ent_key);
-                //         $query = $query->join($ent->getTable(), $query->getModel()->getTable().'.'.$ent->getTable().'_id', '=', $ent->getTable().'.id')->orderBy($ent->getTable().'.'.$orderField, $orderDir);
-                //         $last_order = $curOrder;
-                //     }
-                // }
-                // elseif(isset($orderField) && isset($orderDir))
-                // {
-                //     $query = $query->orderBy($orderField, $orderDir);
-                // }
-                // $this->subJoined = false;
-
-
-                // order by query builder
-                if(count($order) > 0)
-                {
-                    
-                    $ent = $this->getEntityClass($entity);
-                    $ent = new $ent;
-                    foreach($order as $key => $curOrder)
-                    {
-                        if(!$this->searchableItem($ent, $curOrder)) {
-                            return new MessageBag([
-                                'code' => 401,
-                                'messages' => [
-                                    //@TODO: lets add more clarity here later, for now this will do.
-                                    'You do not have permission to view this resource.' 
-                                ]
-                            ]);
-                        }
-                        $rel = call_user_func([$ent, $curOrder]);
-                        $rel = get_class($rel->getRelated());
-                        $query = $query->joinsToModel($curOrder, get_class($ent), ($key == 1));
-                        $ent = new $rel;
-                    }
-                    $query = $query->orderBy($query->priorJoinToModelParents[$ent->getTable()].'.'.$orderField, $orderDir);
-                }
-                elseif(isset($orderField) && isset($orderDir))
-                {
-                    $query = $query->orderBy($orderField, $orderDir);
-                }
-            }
+            // Order the query as stated
+            $this->orderQuery($query, $entity, $order, $orderField, $orderDir);
+            
+            // Need to ensure the select statement is at least table-prefixed
+            // @TODO: needs more testing as to why it returns incorrect rows when not prefixed... since tables are being aliased.
+            $query = $query->selectRaw($query->getModel()->getTable().'.*');
 
             $results = $query;
         }
 
         if(!empty($results))
         {
-            // print_r($results->toSql());die;
             return $results;
         }
         else
@@ -460,16 +426,10 @@ class Searcher
      *
      * @return \Illuminate\Database\Query\Builder[]|array
      */
-    private function whereHasBuilder(&$query, &$relations, &$field, &$where, &$value, &$last, &$order, &$orderField, &$orderLast, &$orderDir, &$isOr)
+    private function whereHasBuilder(&$query, &$relations, &$field, &$where, &$value, &$last, $lastHashToModel, &$isOr)
     {
         //grab the relations parsed
         $rel = array_shift($relations);
-
-        // $curOrder = null;
-        // if(count($order) > 0 && $rel == $order[0])
-        // {
-        //     $curOrder = array_shift($order);
-        // }
 
         $runComplex = true;
         if(method_exists($rel, 'isSearchable'))
@@ -482,7 +442,9 @@ class Searcher
             if($isOr == true)
             {
                 $query = $query->orWhereHas($rel, 
-                    function ($inner) use($field, $where, $value, $rel, $relations, $last, $curOrder, $order, &$orderField, $orderLast, $orderDir, &$isOr) {
+                    function ($inner) use($query, $field, $where, $value, $rel, $relations, $last, $lastHashToModel, &$isOr) {
+                        // Get a hash for the sub table names
+                        $hashtomodel = $this->hashTableNames(( $lastHashToModel ? $lastHashToModel['model'] : $query ), $inner, $rel, ( $lastHashToModel['table'] ? $lastHashToModel['table'] : null ));
                         //make sure that the relation is not the last one in the list.
                         if($rel == $last) {
                             /**
@@ -496,17 +458,17 @@ class Searcher
                                 if($where == 'in')
                                 { 
                                     $value = (is_array($value) ? $value : explode(',', $value));
-                                    $inner->whereIn($inner->getModel()->getTable().'.'.$field, $value);
+                                    $inner->whereIn($hashtomodel['hash'].'.'.$field, $value);
                                 }
                                 else
                                 {
-                                    $inner->where($inner->getModel()->getTable().'.'.$field, $where, $value);
+                                    $inner->where($hashtomodel['hash'].'.'.$field, $where, $value);
                                 }
                             }
                         }
                         else
                         {
-                            $this->whereHasBuilder($inner, $relations, $field, $where, $value, $last, $order, $orderField, $orderLast, $orderDir, $isOr);
+                            $this->whereHasBuilder($inner, $relations, $field, $where, $value, $last, $hashtomodel, $isOr);
                         }
                     }
                 );
@@ -514,7 +476,9 @@ class Searcher
             else
             {
                 $query = $query->whereHas($rel, 
-                    function ($inner) use($field, $where, $value, $rel, $relations, $last, $curOrder, $order, &$orderField, $orderLast, $orderDir, &$isOr) {
+                    function ($inner) use($query, $field, $where, $value, $rel, $relations, $last, $lastHashToModel, &$isOr) {
+                        // Get a hash for the sub table names
+                        $hashtomodel = $this->hashTableNames(( $lastHashToModel ? $lastHashToModel['model'] : $query ), $inner, $rel, ( $lastHashToModel['table'] ? $lastHashToModel['table'] : null ));
                         //make sure that the relation is not the last one in the list.
                         if($rel == $last) {
                             /**
@@ -528,47 +492,55 @@ class Searcher
                                 if($where == 'in')
                                 { 
                                     $value = (is_array($value) ? $value : explode(',', $value));
-                                    $inner->whereIn($inner->getModel()->getTable().'.'.$field, $value);
+                                    $inner->whereIn($hashtomodel['table'].'.'.$field, $value);
                                 }
                                 else
                                 {
-                                    $inner->where($inner->getModel()->getTable().'.'.$field, $where, $value);
+                                    $inner->where($hashtomodel['table'].'.'.$field, $where, $value);
                                 }
                             }
                         }
                         else
                         {
-                            $this->whereHasBuilder($inner, $relations, $field, $where, $value, $last, $order, $orderField, $orderLast, $orderDir, $isOr);
+                            $this->whereHasBuilder($inner, $relations, $field, $where, $value, $last, $hashtomodel, $isOr);
                         }
                     }
                 );
             }
             
         }
-
-        /*
-        * This is a workaround for ordering a result set by an associated value in another table, 
-        * since the way we construct the query is not compatible with an orderby sub table, that needs a join, 
-        * so we join here based on the standardisation assumption... 
-        * which is needing to me migrated to configurations within models and use this as a fallback.
-        */
-        // if(!empty($curOrder)){
-        //     $ent_key = $this->getEntityClass($curOrder);
-
-        //     if($ent_key == null)
-        //     {
-        //         return new MessageBag([
-        //                 'messages' => [
-        //                     //@TODO: lets add more clarity here later, for now this will do.
-        //                     'Entity does not exist: '.$curOrder 
-        //                 ]
-        //             ]);
-        //     }
-        //     $ent = (new $ent_key);
-        //     $query = $query->join($ent->getTable(), $query->getModel()->getTable().'.'.$ent->getTable().'_id', '=', $ent->getTable().'.id')->orderBy($ent->getTable().'.'.$orderField, $orderDir);
-        //     $this->subJoined = true;
-        // }
         return $query;
+    }
+
+
+    private function hashTableNames($model, &$inner, $rel, $priorTable = null) {
+        $relation = \Illuminate\Database\Eloquent\Relations\Relation::noConstraints(function () use ($model, $rel) {
+            return $model->{$rel}();
+        });
+        $hash = $this->getWhereHasCountHash();
+        $related = $relation->getRelated();
+        $table = $related->getTable();
+        $related->el_table_hash = $hash;
+
+        $inner->from($table.' as '.$hash);
+        array_walk($inner->getQuery()->wheres, function(&$item) use ($table, $hash, $model, $priorTable) {
+            $item['first'] = str_replace($table.'.', $hash.'.', $item['first']);
+            $item['second'] = str_replace($table.'.', $hash.'.', $item['second']);
+            if($priorTable) {
+                $item['first'] = str_replace($model->getTable().'.', $priorTable.'.', $item['first']);
+                $item['second'] = str_replace($model->getTable().'.', $priorTable.'.', $item['second']);
+            }
+        });
+
+        return [
+            'table' => $hash,
+            'model' => $related
+        ];
+    }
+
+    protected $whereHasHashCount = 0;
+    protected function getWhereHasCountHash() {
+        return "eloquent_builder_wherehas_".$this->whereHasHashCount++;
     }
 
 }
