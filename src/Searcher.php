@@ -192,7 +192,7 @@ class Searcher
      * @return \Illuminate\Http\Response
      */
     private function orderQuery(&$query, $entity, $order, $orderField, $orderDir) {
-        if(count($order) > 0)
+        if(isset($order) && count($order) > 0)
         {
             
             $ent = $this->getEntityClass($entity);
