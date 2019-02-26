@@ -341,7 +341,7 @@ class Searcher
             if(!$this->subJoined){
 
                 
-                if(count($order) > 0)
+                if(isset($order) && count($order) > 0)
                 {
                     $last_order = null;
                     foreach($order as $curOrder)
