@@ -409,7 +409,7 @@ class Searcher
         $rel = array_shift($relations);
 
         $curOrder = null;
-        if(count($order) > 0 && $rel == $order[0])
+        if(isset($order) && count($order) > 0 && $rel == $order[0])
         {
             $curOrder = array_shift($order);
         }
